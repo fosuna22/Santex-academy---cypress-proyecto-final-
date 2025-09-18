@@ -1,7 +1,11 @@
 describe ('Login',() =>{
 
+   
+   
+   
+   
+   
      const url = 'https://ticketazo.com.ar/auth/login';
-
 
      it('Casos exitosos',() => {
      cy.visit(url)
