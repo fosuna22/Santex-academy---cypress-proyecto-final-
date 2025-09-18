@@ -10,14 +10,19 @@ describe ('Login',() =>{
      //cy.get('[data-cy="btn-login"]').click()
      //cy.url().should('not.eq', url) 
         //})
+           
+       it('casos exitoso-recuperar contraseña',() => {
+       cy.visit(url)
+       cy.get('[data-cy="btn-forgot-password"]').click()
+       cy.url().should('include', '/auth/forgot-password')
+       cy.get('[data-cy="input-email"]').type('vaninap79@gmail.com')
+       cy.get('[data-cy="btn-enviar-email"]').click()
+   
+   
+        //cy.get('.text-danger').should('have.class', 'text-danger');
 
-     it.only("prueba para vani", () => {
-     cy.visit("https://ticketazo.com.ar/auth/login");
-     cy.get('[data-cy="input-email"]').type("testtestcom");
-     cy.get('[data-cy="btn-login"]').click()
-     cy.wait(4000);
-     cy.get('.text-danger').should('contain', 'Incluye un signo "@" en la dirección de correo electrónico');
-  });
+
+   });
      
      }    )
      
