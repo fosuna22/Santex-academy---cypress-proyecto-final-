@@ -3,7 +3,7 @@ describe('Limpiar Filtros',() =>{
         cy.visit('https://ticketazo.com.ar');
         cy.reload();
     })
-   /* it('Limpiar Filtro Categoria',()=>{
+   it('Limpiar Filtro Categoria',()=>{
          cy.get('.p-2').click()    
          cy.get('button[aria-label="Categoría"]:visible').click()
          cy.contains('span', 'Recital', { timeout: 10000 }).should('be.visible').click({ force: true })
@@ -19,7 +19,7 @@ describe('Limpiar Filtros',() =>{
          cy.get('.mx-auto > .flex-wrap > :nth-child(6) > .z-0').click()
          cy.get('button[aria-label="Provincia"]').should('contain.text', 'Provincia') 
     }      
-  )   */
+  )   
   it('Limpiar Filtro fecha',()=>{       
         cy.get('.p-2').click() 
         cy.get('div[aria-label="día, Fecha de inicio, "]').filter(':visible').click().type('19')
