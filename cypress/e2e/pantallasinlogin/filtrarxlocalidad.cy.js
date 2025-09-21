@@ -20,6 +20,7 @@ describe('Filtrar por provincia y localidad', () => {
     cy.get('[data-cy="evento-titulo"]').should('exist');
   });
 });
+/**/
 
 
 
