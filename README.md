@@ -55,3 +55,10 @@ npx cypress open
 ```
 npx cypress run
 ```
+
+## 📑 Documentación adicional
+📝 [Plan de Pruebas](https://docs.google.com/document/d/1UEesrkUArLfrnNrhw5rs6bjldseTzFEE/edit?usp=sharing&ouid=111005532130681934314&rtpof=true&sd=true)
+
+🧪 [Casos de Prueba para Ticketazo](https://docs.google.com/spreadsheets/d/1UK9am9VE25f6hh1Z-v93wPdufwOZoaYXz2hn4mwpLW8/edit?usp=sharing)
+
+📋 [Tablero de Trello](https://trello.com/b/eELH7luU/xacademy-qa-automation)
