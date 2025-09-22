@@ -10,11 +10,29 @@ cypress/
   ├── e2e/        # Casos de prueba automatizados
   ├── fixtures/   # Datos de prueba
   ├── support/    # Comandos custom y configuraciones
+documentación/
 README.md
 package.json
 ```
 
 ---
+
+## 📝 Tableto Trello
+
+Link tablero: https://trello.com/b/eELH7luU/xacademy-qa-automation
+
+📌 Listas sugeridas
+
+Backlog → ideas o tareas pendientes que todavía no arrancaste.
+
+To Do → lo que ya decidiste hacer pronto.
+
+In Progress → lo que estás trabajando en este momento.
+
+Review / Testing → tareas listas, pero que necesitan revisión.
+
+Done ✅ → finalizado.
+
 
 ## 🚀 Tecnologías utilizadas
 
