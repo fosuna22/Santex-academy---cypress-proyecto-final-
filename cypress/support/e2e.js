@@ -14,7 +14,7 @@
 // ***********************************************************
 
 // Import commands.js using ES2015 syntax:
-import "./commands";
-import "./commandsRegistro";
-import "./categoria";
-import "./limpiarFitro";
+import './commands'
+import './commandsRegistro'
+import './categoria'
+import './limpiarFitro'
