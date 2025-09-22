@@ -56,7 +56,7 @@ Cloná el repositorio y luego instalá las dependencias:
 
 ```bash
 git clone https://github.com/fosuna22/Santex-academy---cypress-proyecto-final-
-cd Challenge_grupo2
+cd Santex-academy---cypress-proyecto-final-
 npm install
 ```
 
