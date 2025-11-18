@@ -150,21 +150,80 @@ jobs:
 
       - name: POST summary.json a n8n
         env:
-          WEBHOOK_URL: "https://curnson8ntechpurpose.app.n8n.cloud/webhook-test/0f51690c-9699-42e8-9b91-df35bedf8eff"
+          WEBHOOK_URL: "https://curnson8ntechpurpose.app.n8n.cloud/webhook/0f51690c-9699-42e8-9b91-df35bedf8eff"
         continue-on-error: true
         run: |
-          set -euo pipefail
-          HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/webhook_response.json -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            --data-binary "@cypress/results/summary.json")
+          set +e  # No fallar en errores
           
+          echo "🔍 Iniciando envío al webhook..."
+          echo "URL: $WEBHOOK_URL"
+          
+          # Verificar que el archivo summary.json existe
+          if [ ! -f "cypress/results/summary.json" ]; then
+            echo "⚠️ No se encontró summary.json, saltando envío al webhook"
+            exit 0
+          fi
+          
+          # Validar que el JSON es válido
+          if ! jq empty cypress/results/summary.json 2>/dev/null; then
+            echo "❌ El archivo summary.json no es un JSON válido"
+            cat cypress/results/summary.json
+            exit 0
+          fi
+          
+          # Mostrar tamaño y preview del JSON
+          echo "📄 Tamaño del archivo: $(wc -c < cypress/results/summary.json) bytes"
+          echo "📋 Preview del JSON (primeras 500 caracteres):"
+          head -c 500 cypress/results/summary.json
+          echo ""
+          echo ""
+          
+          # Probar primero con un GET para verificar que el webhook existe
+          echo "🔍 Verificando webhook (GET)..."
+          TEST_RESPONSE=$(curl -sS -w "\n%{http_code}" -X GET "$WEBHOOK_URL" 2>&1 || echo "ERROR")
+          echo "Respuesta GET: $TEST_RESPONSE"
+          
+          # Enviar al webhook con más información de debugging
+          echo "📤 Enviando POST al webhook..."
+          
+          # Guardar el debug de curl
+          curl -v -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            --data-binary "@cypress/results/summary.json" \
+            -w "\nHTTP_CODE=%{http_code}\n" \
+            -o /tmp/webhook_response.json \
+            -sS 2>&1 | tee /tmp/curl_debug.log
+          
+          # Extraer el código HTTP del log
+          HTTP_CODE=$(grep "HTTP_CODE=" /tmp/curl_debug.log | tail -n1 | cut -d'=' -f2 || echo "000")
+          
+          echo ""
+          echo "📊 Información de la petición:"
+          grep -E "(< HTTP|> POST|> Content-Type|> Content-Length|HTTP_CODE)" /tmp/curl_debug.log || true
+          echo ""
           echo "HTTP_CODE=$HTTP_CODE"
           
           if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "✅ Webhook enviado exitosamente"
+            echo "✅ Webhook enviado exitosamente (código: $HTTP_CODE)"
+            if [ -f /tmp/webhook_response.json ]; then
+              echo "Respuesta del servidor:"
+              cat /tmp/webhook_response.json | head -c 500 || true
+            fi
           else
             echo "⚠️ Webhook retornó código $HTTP_CODE"
-            cat /tmp/webhook_response.json || true
+            if [ -f /tmp/webhook_response.json ]; then
+              echo "Respuesta del servidor:"
+              cat /tmp/webhook_response.json || true
+            fi
+            echo ""
+            echo "💡 Posibles causas del 404:"
+            echo "   - El webhook no está activo en n8n"
+            echo "   - La URL del webhook es incorrecta"
+            echo "   - El webhook requiere autenticación adicional"
+            echo "   - El método HTTP no es el esperado (n8n puede requerir GET en lugar de POST)"
+            # No fallar el workflow, solo mostrar advertencia
+            exit 0
           fi
 
       - name: Upload artifacts
