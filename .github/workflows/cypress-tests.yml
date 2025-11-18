@@ -186,29 +186,75 @@ jobs:
           # Enviar al webhook con más información de debugging
           echo "📤 Enviando POST al webhook..."
           
-          # Leer el contenido del JSON y prepararlo para envío
-          JSON_CONTENT=$(cat cypress/results/summary.json)
-          echo "📦 Contenido JSON a enviar:"
-          echo "$JSON_CONTENT" | jq . || echo "$JSON_CONTENT"
+          # Mostrar el contenido del archivo
+          echo "📦 Contenido del archivo summary.json:"
+          cat cypress/results/summary.json | jq . || cat cypress/results/summary.json
           echo ""
           
-          # Verificar el tamaño del contenido
-          CONTENT_LENGTH=$(echo -n "$JSON_CONTENT" | wc -c)
-          echo "📏 Longitud del contenido: $CONTENT_LENGTH bytes"
+          # Verificar el tamaño del archivo
+          FILE_SIZE=$(wc -c < cypress/results/summary.json)
+          echo "📏 Tamaño del archivo: $FILE_SIZE bytes"
           echo ""
           
-          # Enviar el JSON directamente en el body (n8n debería recibirlo así)
-          # Usamos --data-raw para enviar el JSON tal cual sin modificaciones
+          # Método 1: Enviar el archivo directamente usando @ (más confiable)
+          echo "🔄 Intentando método 1: Envío directo del archivo..."
+          
+          # Calcular Content-Length manualmente para verificación
+          EXPECTED_LENGTH=$(wc -c < cypress/results/summary.json | tr -d ' ')
+          echo "📐 Content-Length esperado: $EXPECTED_LENGTH bytes"
+          
           curl -v -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json; charset=utf-8" \
+            -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            --data-raw "$JSON_CONTENT" \
+            -H "Content-Length: $EXPECTED_LENGTH" \
+            --data "@cypress/results/summary.json" \
             -w "\nHTTP_CODE=%{http_code}\n" \
             -o /tmp/webhook_response.json \
             2>&1 | tee /tmp/curl_debug.log
           
+          # Verificar que el body se está enviando
+          echo ""
+          echo "🔍 Verificando que el body se envió:"
+          if grep -q "Content-Length: $EXPECTED_LENGTH" /tmp/curl_debug.log; then
+            echo "✅ Content-Length correcto en la petición"
+          else
+            echo "⚠️ Content-Length no encontrado o incorrecto en los logs"
+          fi
+          
+          # Mostrar las líneas que contienen el body (si curl las muestra)
+          echo ""
+          echo "📄 Líneas relacionadas con el body en los logs:"
+          grep -i "data\|body\|send" /tmp/curl_debug.log | head -5 || echo "No se encontraron líneas relacionadas"
+          
           # Extraer el código HTTP del log
           HTTP_CODE=$(grep "HTTP_CODE=" /tmp/curl_debug.log | tail -n1 | cut -d'=' -f2 || echo "000")
+          
+          # Mostrar información detallada de la petición
+          echo ""
+          echo "📊 Detalles de la petición HTTP:"
+          echo "----------------------------------------"
+          grep -E "(> POST|> Host|> Content-Type|> Content-Length|> Accept|< HTTP)" /tmp/curl_debug.log || true
+          echo "----------------------------------------"
+          echo ""
+          
+          # Si falla, probar método alternativo
+          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
+            echo "⚠️ Método 1 retornó código $HTTP_CODE, probando método alternativo..."
+            
+            # Método 2: Leer y enviar como string escapado
+            JSON_ESCAPED=$(cat cypress/results/summary.json | jq -c .)
+            echo "🔄 Intentando método 2: JSON escapado..."
+            curl -v -X POST "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              -d "$JSON_ESCAPED" \
+              -w "\nHTTP_CODE=%{http_code}\n" \
+              -o /tmp/webhook_response2.json \
+              2>&1 | tee /tmp/curl_debug2.log
+            
+            HTTP_CODE2=$(grep "HTTP_CODE=" /tmp/curl_debug2.log | tail -n1 | cut -d'=' -f2 || echo "000")
+            echo "Método 2 retornó código: $HTTP_CODE2"
+          fi
           
           echo ""
           echo "📊 Información de la petición:"
