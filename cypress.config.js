@@ -10,17 +10,17 @@ module.exports = defineConfig({
     viewportHeight: 720,
     
     // Configuración de videos y screenshots
-    video: true,
+    video: false, // Desactivado para acelerar ejecución en CI
     screenshotOnRunFailure: true,
     
-    // Timeouts
-    defaultCommandTimeout: 10000,
-    requestTimeout: 10000,
-    responseTimeout: 10000,
+    // Timeouts optimizados
+    defaultCommandTimeout: 8000,
+    requestTimeout: 8000,
+    responseTimeout: 8000,
     
-    // Configuración de retry
+    // Configuración de retry reducida para acelerar ejecución
     retries: {
-      runMode: 2,
+      runMode: 0, // Sin retries en CI para ejecución más rápida
       openMode: 1
     },
     
