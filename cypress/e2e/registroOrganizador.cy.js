@@ -23,7 +23,7 @@ describe('Registro de Organizador de Evento de Ticketazo', () => {
     cy.url().should('include', '/auth/registerClient')
   });
 
-  //Prueba registro con usuario ya exixtente y con establecimiento
+  //Prueba registro con usuario existente y con establecimiento
 
   it('No debe poder registrar un usuario ya existente', () => {
     cy.fixture('organizadorRegistrado').then((organizador) => {  
@@ -73,7 +73,7 @@ describe('Registro de Organizador de Evento de Ticketazo', () => {
     cy.contains("Incluye una '@' en la dirección de correo electrónico. La direccion " + EMAIL_INVALIDO + " le falta una '@'").should('be.visible')
   });
 
-  //Prueba completando el formulario con una contraseña menor a 8 carácteres
+  //Prueba completando el formulario con una contraseña menor a 8 caracteres
 
   it('No debe permitir ingresar una contraseña menor a 8 caracteres alfanuméricos', () => {
     cy.registro(
