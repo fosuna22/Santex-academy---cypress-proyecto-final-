@@ -150,13 +150,22 @@ jobs:
 
       - name: POST summary.json a n8n
         env:
-          WEBHOOK_URL: "https://curnson8ntechpurpose.app.n8n.cloud/webhook/0f51690c-9699-42e8-9b91-df35bedf8eff"
+          WEBHOOK_URL: "https://curnson8ntechpurpose.app.n8n.cloud/webhook-test/0f51690c-9699-42e8-9b91-df35bedf8eff"
+        continue-on-error: true
         run: |
           set -euo pipefail
-          curl -sS -f -X POST "$WEBHOOK_URL" \
+          HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/webhook_response.json -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            --data-binary "@cypress/results/summary.json" \
-            -w "\nHTTP_CODE=%{http_code}\n"
+            --data-binary "@cypress/results/summary.json")
+          
+          echo "HTTP_CODE=$HTTP_CODE"
+          
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Webhook enviado exitosamente"
+          else
+            echo "⚠️ Webhook retornó código $HTTP_CODE"
+            cat /tmp/webhook_response.json || true
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
