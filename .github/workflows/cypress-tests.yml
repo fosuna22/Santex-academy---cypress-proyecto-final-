@@ -196,69 +196,69 @@ jobs:
           echo "📏 Tamaño del archivo: $FILE_SIZE bytes"
           echo ""
           
-          # Método 1: Enviar el archivo directamente usando @ (más confiable)
-          echo "🔄 Intentando método 1: Envío directo del archivo..."
+          # Leer el JSON y prepararlo para envío
+          JSON_DATA=$(cat cypress/results/summary.json)
           
-          # Calcular Content-Length manualmente para verificación
-          EXPECTED_LENGTH=$(wc -c < cypress/results/summary.json | tr -d ' ')
-          echo "📐 Content-Length esperado: $EXPECTED_LENGTH bytes"
-          
-          curl -v -X POST "$WEBHOOK_URL" \
+          # Método 1: Enviar JSON directamente (el que debería funcionar)
+          echo "🔄 Método 1: Enviando JSON directamente en el body..."
+          HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/webhook_response1.json \
+            -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            -H "Content-Length: $EXPECTED_LENGTH" \
-            --data "@cypress/results/summary.json" \
-            -w "\nHTTP_CODE=%{http_code}\n" \
-            -o /tmp/webhook_response.json \
-            2>&1 | tee /tmp/curl_debug.log
+            --data-raw "$JSON_DATA" 2>&1 | tail -n1)
           
-          # Verificar que el body se está enviando
+          echo "Código HTTP método 1: $HTTP_CODE"
+          
+          # Método 2: Envolver el JSON en un objeto con campo 'data'
           echo ""
-          echo "🔍 Verificando que el body se envió:"
-          if grep -q "Content-Length: $EXPECTED_LENGTH" /tmp/curl_debug.log; then
-            echo "✅ Content-Length correcto en la petición"
-          else
-            echo "⚠️ Content-Length no encontrado o incorrecto en los logs"
-          fi
+          echo "🔄 Método 2: Enviando JSON envuelto en objeto con campo 'data'..."
+          WRAPPED_JSON=$(echo "$JSON_DATA" | jq -c '{data: .}')
+          echo "JSON envuelto: $WRAPPED_JSON"
           
-          # Mostrar las líneas que contienen el body (si curl las muestra)
+          HTTP_CODE2=$(curl -sS -w "%{http_code}" -o /tmp/webhook_response2.json \
+            -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            --data-raw "$WRAPPED_JSON" 2>&1 | tail -n1)
+          
+          echo "Código HTTP método 2: $HTTP_CODE2"
+          
+          # Método 3: Enviar como campo 'body' dentro de un objeto
           echo ""
-          echo "📄 Líneas relacionadas con el body en los logs:"
-          grep -i "data\|body\|send" /tmp/curl_debug.log | head -5 || echo "No se encontraron líneas relacionadas"
+          echo "🔄 Método 3: Enviando JSON en campo 'body'..."
+          BODY_JSON=$(echo "$JSON_DATA" | jq -c '{body: .}')
+          echo "JSON con campo body: $BODY_JSON"
           
-          # Extraer el código HTTP del log
-          HTTP_CODE=$(grep "HTTP_CODE=" /tmp/curl_debug.log | tail -n1 | cut -d'=' -f2 || echo "000")
+          HTTP_CODE3=$(curl -sS -w "%{http_code}" -o /tmp/webhook_response3.json \
+            -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            --data-raw "$BODY_JSON" 2>&1 | tail -n1)
           
-          # Mostrar información detallada de la petición
+          echo "Código HTTP método 3: $HTTP_CODE3"
+          
+          # Método 4: Enviar el archivo directamente con --data-binary
           echo ""
-          echo "📊 Detalles de la petición HTTP:"
-          echo "----------------------------------------"
-          grep -E "(> POST|> Host|> Content-Type|> Content-Length|> Accept|< HTTP)" /tmp/curl_debug.log || true
-          echo "----------------------------------------"
-          echo ""
+          echo "🔄 Método 4: Enviando archivo con --data-binary..."
+          HTTP_CODE4=$(curl -sS -w "%{http_code}" -o /tmp/webhook_response4.json \
+            -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            --data-binary "@cypress/results/summary.json" 2>&1 | tail -n1)
           
-          # Si falla, probar método alternativo
-          if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ]; then
-            echo "⚠️ Método 1 retornó código $HTTP_CODE, probando método alternativo..."
-            
-            # Método 2: Leer y enviar como string escapado
-            JSON_ESCAPED=$(cat cypress/results/summary.json | jq -c .)
-            echo "🔄 Intentando método 2: JSON escapado..."
-            curl -v -X POST "$WEBHOOK_URL" \
-              -H "Content-Type: application/json" \
-              -H "Accept: application/json" \
-              -d "$JSON_ESCAPED" \
-              -w "\nHTTP_CODE=%{http_code}\n" \
-              -o /tmp/webhook_response2.json \
-              2>&1 | tee /tmp/curl_debug2.log
-            
-            HTTP_CODE2=$(grep "HTTP_CODE=" /tmp/curl_debug2.log | tail -n1 | cut -d'=' -f2 || echo "000")
-            echo "Método 2 retornó código: $HTTP_CODE2"
-          fi
+          echo "Código HTTP método 4: $HTTP_CODE4"
+          
+          # Mostrar resumen
+          echo ""
+          echo "📊 Resumen de intentos:"
+          echo "  Método 1 (JSON directo): $HTTP_CODE"
+          echo "  Método 2 (campo 'data'): $HTTP_CODE2"
+          echo "  Método 3 (campo 'body'): $HTTP_CODE3"
+          echo "  Método 4 (--data-binary): $HTTP_CODE4"
+          
+          # Usar el código HTTP del método que funcionó (o el primero)
+          HTTP_CODE=$HTTP_CODE
           
           echo ""
-          echo "📊 Información de la petición:"
-          grep -E "(< HTTP|> POST|> Content-Type|> Content-Length|HTTP_CODE)" /tmp/curl_debug.log || true
+          echo "💡 Nota: Revisa en n8n qué método recibió los datos correctamente"
+          echo "   Los métodos 2 y 3 envuelven el JSON en un objeto, lo cual puede ser necesario"
+          echo "   dependiendo de cómo esté configurado el webhook en n8n."
           echo ""
           echo "HTTP_CODE=$HTTP_CODE"
           
