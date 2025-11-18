@@ -1,83 +1,168 @@
-name: Ejecutar Pruebas Cypress y Enviar Resultados
+name: QA Report (Cypress + Mochawesome)
 
 on:
-  push:
-    branches: [ main, master, develop ]
-  pull_request:
-    branches: [ main, master, develop ]
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch a ejecutar'
+        required: true
+        default: 'main'
+      tag:
+        description: 'Tag/grep para las pruebas (opcional, ej: @login)'
+        required: false
+        default: ''
 
 jobs:
-  cypress-tests:
+  cypress-and-report:
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v4
 
-      - name: Configurar Node.js
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: '20'
 
-      - name: Instalar dependencias
-        run: npm ci
-
-      - name: Ejecutar pruebas Cypress
-        uses: cypress-io/github-action@v6
-        with:
-          browser: chrome
-          record: false
-        continue-on-error: true
-        id: cypress-run
-
-      - name: Generar reporte de resultados
-        if: always()
+      - name: Install deps
         run: |
-          echo "## Resultados de Pruebas Cypress" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.cypress-run.outcome }}" == "success" ]; then
-            echo "✅ **Estado:** Todas las pruebas pasaron exitosamente" >> $GITHUB_STEP_SUMMARY
-            echo "**Total de pruebas:** Ejecutadas correctamente" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Estado:** Algunas pruebas fallaron" >> $GITHUB_STEP_SUMMARY
-            echo "**Total de pruebas:** Revisar logs para más detalles" >> $GITHUB_STEP_SUMMARY
+          npm ci
+          # Reportería Mochawesome
+          npm i -D cypress-multi-reporters mochawesome mochawesome-merge mochawesome-report-generator
+          # Utilidades
+          sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Reporter config (Mochawesome → JSON)
+        run: |
+          rm -rf cypress/results || true
+          mkdir -p cypress/results
+          cat > reporter-config.json << 'JSON'
+          {
+            "reporterEnabled": "mochawesome",
+            "mochawesomeReporterOptions": {
+              "reportDir": "cypress/results",
+              "overwrite": false,
+              "quiet": true,
+              "html": false,
+              "json": true
+            }
+          }
+          JSON
+
+      - name: Run Cypress (genera mochawesome *.json)
+        env:
+          TEST_TAG: ${{ github.event.inputs.tag }}
+          CI: "1"
+        run: |
+          set -euxo pipefail
+
+          EXTRA_ARGS=""
+          if [ -n "$TEST_TAG" ]; then
+            echo "Ejecutando con filtro: $TEST_TAG"
+            # Si usás cypress-grep, descomentá:
+            # EXTRA_ARGS="--env grepTags=$TEST_TAG"
+            # O filtrá por spec si preferís:
+            # EXTRA_ARGS="--spec cypress/e2e/${TEST_TAG}.cy.js"
           fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Fecha de ejecución:** $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
 
-      - name: Enviar resultados al webhook n8n
-        if: always()
+          # Ejecuta Cypress con cypress-multi-reporters usando Mochawesome
+          npx cypress run \
+            --reporter cypress-multi-reporters \
+            --reporter-options "configFile=reporter-config.json" \
+            $EXTRA_ARGS || true   # no rompemos el job por fallas de tests
+
+          # Validación mínima: ¿hay al menos un JSON de mochawesome?
+          test -n "$(ls -1 cypress/results/*.json 2>/dev/null | head -n1)" || (echo "Mochawesome no generó JSON" && exit 1)
+
+      - name: Merge mochawesome → merged.json
         run: |
-          STATUS="${{ steps.cypress-run.outcome == 'success' && 'Éxito' || 'Fallo' }}"
-          EMOJI="${{ steps.cypress-run.outcome == 'success' && '✅' || '❌' }}"
-          
-          curl -X POST https://curnson8ntechpurpose.app.n8n.cloud/webhook/0f51690c-9699-42e8-9b91-df35bedf8eff \
-            -H "Content-Type: application/json" \
-            -d '{
-              "estado": "'"$STATUS"'",
-              "emoji": "'"$EMOJI"'",
-              "repositorio": "${{ github.repository }}",
-              "branch": "${{ github.ref_name }}",
-              "commit": "${{ github.sha }}",
-              "autor": "${{ github.actor }}",
-              "workflow": "${{ github.workflow }}",
-              "run_id": "${{ github.run_id }}",
-              "url_workflow": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "fecha": "${{ github.event.head_commit.timestamp }}",
-              "mensaje": "'"$EMOJI"' Estado: '"$STATUS"'. Repositorio: ${{ github.repository }}. Branch: ${{ github.ref_name }}. Puedes ver los detalles en: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            }'
+          # Une todos los JSON de mochawesome en uno solo
+          npx mochawesome-merge cypress/results/*.json > cypress/results/merged.json
+          test -s cypress/results/merged.json
 
-      - name: Subir videos y screenshots (si hay fallos)
-        if: failure()
+      - name: (Opcional) Generar HTML a partir del merge
+        run: |
+          npx marge cypress/results/merged.json \
+            --reportDir cypress/results \
+            --inline
+
+      - name: Crear summary.json (total, passed, failed, pending, duration, passedTests, failedTests)
+        run: |
+          set -euo pipefail
+          MERGED="cypress/results/merged.json"
+
+          # Totales a partir de la estructura mochawesome-merge
+          TOTAL=$(jq -r '.stats.tests // ([..|objects|select(has("tests"))|.tests[]?|select(.state!="pending")]|length // 0)' "$MERGED")
+          PASSED=$(jq -r '[..|objects|select(has("tests"))|.tests[]?|select(.state=="passed" or .pass==true)]|length' "$MERGED")
+          FAILED=$(jq -r '[..|objects|select(has("tests"))|.tests[]?|select(.state=="failed" or .fail==true)]|length' "$MERGED")
+          PENDING=$(jq -r '[..|objects|select(has("tests"))|.tests[]?|select(.state=="pending")]|length' "$MERGED")
+          DURATION=$(jq -r '.stats.duration // ([..|objects|select(has("tests"))|.tests[]?|.duration] | add // 0)' "$MERGED")
+
+          PASSED_LIST=$(jq -c '[..
+            | objects
+            | select(has("tests"))
+            | .tests[]?
+            | select(.state=="passed" or .pass==true)
+            | {
+                fullTitle: (.fullTitle // .title // ""),
+                file: (.file // .fullFile // ""),
+                duration: (.duration // 0)
+              }
+          ]' "$MERGED")
+
+          FAILED_LIST=$(jq -c '[..
+            | objects
+            | select(has("tests"))
+            | .tests[]?
+            | select(.state=="failed" or .fail==true)
+            | {
+                fullTitle: (.fullTitle // .title // ""),
+                file: (.file // .fullFile // ""),
+                duration: (.duration // 0),
+                error: (.err.message // .err // .error // "")
+              }
+          ]' "$MERGED")
+
+          # Resumen final para el webhook
+          jq -n \
+            --argjson total      "$TOTAL" \
+            --argjson passed     "$PASSED" \
+            --argjson failed     "$FAILED" \
+            --argjson pending    "$PENDING" \
+            --argjson duration   "$DURATION" \
+            --argjson passedArr  "$PASSED_LIST" \
+            --argjson failedArr  "$FAILED_LIST" \
+            '{
+              total: $total,
+              passed: $passed,
+              failed: $failed,
+              pending: $pending,
+              durationMs: $duration,
+              passedTests: $passedArr,
+              failedTests: $failedArr
+            }' > cypress/results/summary.json
+
+          echo "Resumen:"
+          jq . cypress/results/summary.json
+
+      - name: POST summary.json a n8n
+        env:
+          WEBHOOK_URL: "ACA VA LA URL DE TU WEEBHOOK QUE NOS DA N8N"
+        run: |
+          set -euo pipefail
+          curl -sS -f -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            --data-binary "@cypress/results/summary.json" \
+            -w "\nHTTP_CODE=%{http_code}\n"
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cypress-screenshots-and-videos
+          name: cypress-mochawesome-results
           path: |
-            cypress/screenshots
-            cypress/videos
-          retention-days: 7
-
+            reporter-config.json
+            cypress/results/*.json
+            cypress/results/*.html
