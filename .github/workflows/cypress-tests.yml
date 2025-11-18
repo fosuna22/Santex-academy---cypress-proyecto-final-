@@ -150,7 +150,7 @@ jobs:
 
       - name: POST summary.json a n8n
         env:
-          WEBHOOK_URL: "ACA VA LA URL DE TU WEEBHOOK QUE NOS DA N8N"
+          WEBHOOK_URL: "https://curnson8ntechpurpose.app.n8n.cloud/webhook/0f51690c-9699-42e8-9b91-df35bedf8eff"
         run: |
           set -euo pipefail
           curl -sS -f -X POST "$WEBHOOK_URL" \
