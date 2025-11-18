@@ -186,14 +186,26 @@ jobs:
           # Enviar al webhook con más información de debugging
           echo "📤 Enviando POST al webhook..."
           
-          # Guardar el debug de curl
+          # Leer el contenido del JSON y prepararlo para envío
+          JSON_CONTENT=$(cat cypress/results/summary.json)
+          echo "📦 Contenido JSON a enviar:"
+          echo "$JSON_CONTENT" | jq . || echo "$JSON_CONTENT"
+          echo ""
+          
+          # Verificar el tamaño del contenido
+          CONTENT_LENGTH=$(echo -n "$JSON_CONTENT" | wc -c)
+          echo "📏 Longitud del contenido: $CONTENT_LENGTH bytes"
+          echo ""
+          
+          # Enviar el JSON directamente en el body (n8n debería recibirlo así)
+          # Usamos --data-raw para enviar el JSON tal cual sin modificaciones
           curl -v -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
+            -H "Content-Type: application/json; charset=utf-8" \
             -H "Accept: application/json" \
-            --data-binary "@cypress/results/summary.json" \
+            --data-raw "$JSON_CONTENT" \
             -w "\nHTTP_CODE=%{http_code}\n" \
             -o /tmp/webhook_response.json \
-            -sS 2>&1 | tee /tmp/curl_debug.log
+            2>&1 | tee /tmp/curl_debug.log
           
           # Extraer el código HTTP del log
           HTTP_CODE=$(grep "HTTP_CODE=" /tmp/curl_debug.log | tail -n1 | cut -d'=' -f2 || echo "000")
