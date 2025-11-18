@@ -1,4 +1,6 @@
-module.exports = {
+const { defineConfig } = require("cypress");
+
+module.exports = defineConfig({
   e2e: {
     // URL base de la aplicación Ticketazo
     baseUrl: 'https://ticketazo-app.netlify.app',
@@ -26,4 +28,4 @@ module.exports = {
       // implement node event listeners here
     },
   },
-};
+});
