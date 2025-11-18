@@ -1,0 +1,83 @@
+name: Ejecutar Pruebas Cypress y Enviar Resultados
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  cypress-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar pruebas Cypress
+        uses: cypress-io/github-action@v6
+        with:
+          browser: chrome
+          record: false
+        continue-on-error: true
+        id: cypress-run
+
+      - name: Generar reporte de resultados
+        if: always()
+        run: |
+          echo "## Resultados de Pruebas Cypress" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.cypress-run.outcome }}" == "success" ]; then
+            echo "✅ **Estado:** Todas las pruebas pasaron exitosamente" >> $GITHUB_STEP_SUMMARY
+            echo "**Total de pruebas:** Ejecutadas correctamente" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Estado:** Algunas pruebas fallaron" >> $GITHUB_STEP_SUMMARY
+            echo "**Total de pruebas:** Revisar logs para más detalles" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Fecha de ejecución:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Enviar resultados al webhook n8n
+        if: always()
+        run: |
+          STATUS="${{ steps.cypress-run.outcome == 'success' && 'Éxito' || 'Fallo' }}"
+          EMOJI="${{ steps.cypress-run.outcome == 'success' && '✅' || '❌' }}"
+          
+          curl -X POST https://curnson8ntechpurpose.app.n8n.cloud/webhook/0f51690c-9699-42e8-9b91-df35bedf8eff \
+            -H "Content-Type: application/json" \
+            -d '{
+              "estado": "'"$STATUS"'",
+              "emoji": "'"$EMOJI"'",
+              "repositorio": "${{ github.repository }}",
+              "branch": "${{ github.ref_name }}",
+              "commit": "${{ github.sha }}",
+              "autor": "${{ github.actor }}",
+              "workflow": "${{ github.workflow }}",
+              "run_id": "${{ github.run_id }}",
+              "url_workflow": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "fecha": "${{ github.event.head_commit.timestamp }}",
+              "mensaje": "'"$EMOJI"' Estado: '"$STATUS"'. Repositorio: ${{ github.repository }}. Branch: ${{ github.ref_name }}. Puedes ver los detalles en: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }'
+
+      - name: Subir videos y screenshots (si hay fallos)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots-and-videos
+          path: |
+            cypress/screenshots
+            cypress/videos
+          retention-days: 7
+
